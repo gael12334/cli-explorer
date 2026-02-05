@@ -50,8 +50,8 @@ DIRECTORY /home/gael/Bureau/demo/folder1
 2 : .                                                 DT_DIR
 3 : file2.txt                                         DT_REG
 ```
-- `quit`: closes the program.
+- `N`: For N a number between 1 and X, and X being the number of available entries in the directory, the program will attempt to load the Nth entry in the directory as an image and, if successful, open a window displaying the selected image. To close the window, select the window and press on any key.
 
 ![](img.png)
 
-When a number is entered in the command prompt, the program will attempt to get the entry associated with the entered number, then try to open the file as an image and display it in an SDL window. To close the window, press any key. 
+- `quit`: closes the program.
