@@ -8,55 +8,69 @@
 #include <linux/limits.h>
 #include <ctype.h>
 #include <libgen.h>
+#define INPUT_SIZE (512)
 
-char current_path[PATH_MAX] = {0};
-char* path_end = &current_path[0];
-struct dirent* dirent_array = NULL;
-size_t dirent_size = 0;
-size_t dirent_alloc = 0;
+struct
+{
+    struct dirent *list;
+    size_t size;
+    size_t alloc;
+} entries = {0};
 
-void add_dirent(struct dirent* de) {
-    if(dirent_size >= dirent_alloc) {
-        dirent_alloc++;
-        dirent_alloc *= 2;
-        dirent_array = realloc(dirent_array, sizeof(*dirent_array) * dirent_alloc);
-        assert(dirent_array != NULL);
-    }
+struct
+{
+    char dirpath[PATH_MAX];
+    char input[INPUT_SIZE];
+} program;
 
-    dirent_array[dirent_size] = *de;
-    dirent_size++;
+void load_directory(DIR *dir)
+{
+    void *pentry = NULL;
+    entries.size = 0;
+
+    do
+    {
+        struct dirent *entry = readdir(dir);
+        pentry = entry;
+        if (entry && entries.size >= entries.alloc)
+        {
+            entries.alloc = (entries.alloc + 1) * 2;
+            entries.list = realloc(entries.list, sizeof(*entry) * entries.alloc);
+            assert(entries.list != NULL);
+        }
+        if (entry)
+        {
+            entries.list[entries.size++] = *entry;
+        }
+    } while (pentry);
 }
 
-void clear_dirent(void) {
-    memset(dirent_array, 0, sizeof(*dirent_array) * dirent_alloc);
-    dirent_alloc = dirent_size = 0;
-}
-
-struct dirent* get_dirent(size_t index) {
-    if(index >= dirent_size) {
-        printf("invalid index\n");
-        return NULL;
+int open_directory(const char *path)
+{
+    static char temp[PATH_MAX] = {0};
+    memset(temp, 0, sizeof(temp));
+    strncpy(temp, program.dirpath, PATH_MAX);
+    strncat(temp, "/", PATH_MAX - 1);
+    strncat(temp, path, PATH_MAX - 1);
+    realpath(temp, program.dirpath);
+    DIR *dir = opendir(program.dirpath);
+    if (dir == NULL)
+    {
+        return 1;
     }
-
-    return &dirent_array[index];
-}
-
-void read_directory(const char* path) {
-    clear_dirent();
-    DIR* dir = opendir(path);
-    if(dir == NULL) {
-        printf("failed to open dir.\n%s", path);
-        exit(-1);
-    }
-    
-    struct dirent* de = NULL;
-    while((de = readdir(dir)))
-        add_dirent(de);
+    load_directory(dir);
     closedir(dir);
+    return 0;
 }
 
-void print_directory(void) {
-    static const char* type[] = {
+struct dirent *get_directory(int index)
+{
+    return (index <= entries.size && index >= 1) ? &entries.list[index - 1] : NULL;
+}
+
+void show_directory(void)
+{
+    const char *dirent_type[] = {
         "DT_UNKNOWN",
         "DT_FIFO",
         "DT_CHR",
@@ -73,146 +87,194 @@ void print_directory(void) {
         "",
     };
 
-    struct dirent* de; 
-    for(size_t i = 0; i < dirent_size; i++) {
-        de = get_dirent(i);
-        printf("%zu : %-50s", i + 1, de->d_name);
-        printf("%s\n", type[de->d_type]);
+    for (size_t i = 0; i < entries.size; i++)
+    {
+        int type_int = entries.list[i].d_type;
+        const char *type_str = dirent_type[type_int];
+        printf("%-5zu %-10s ", i + 1, type_str);
+        printf("%s\n", entries.list[i].d_name);
     }
 }
 
-#define BUFFER_SIZE (512)
-char* readline(int* size) {
-    static char buffer[BUFFER_SIZE] = {0};
+void show_directory_path(void)
+{
+    printf("Directory: %s\n", program.dirpath);
+}
 
-    fgets(buffer, BUFFER_SIZE - 1, stdin);
-    for(*size = 0; *size < BUFFER_SIZE; (*size)++) {
-        if(buffer[*size] == '\n' || buffer[*size] == '\r') {
-            buffer[*size] = '\0';
-            break;
+size_t program_prompt(const char *msg)
+{
+    printf("%s > ", msg);
+    memset(program.input, 0, sizeof(program.input));
+    char *result = fgets(program.input, INPUT_SIZE, stdin);
+    if (result == NULL)
+    {
+        memcpy(program.input, "", sizeof(""));
+        return 0;
+    }
+    else
+    {
+        size_t len = strcspn(program.input, "\r\n");
+        program.input[len] = '\0';
+        return len;
+    }
+}
+
+int program_cmd_set(void)
+{
+    static char temp[PATH_MAX];
+    memset(temp, 0, sizeof(temp));
+    if (strcmp(program.input, "set") != 0)
+    {
+        return 0;
+    }
+
+    memcpy(temp, program.dirpath, PATH_MAX - 1);
+    memcpy(program.dirpath, "", sizeof(""));
+    program_prompt("absolute path");
+    if (open_directory(program.input))
+    {
+        printf("can't load directory.\n");
+        memcpy(program.dirpath, temp, PATH_MAX - 1);
+        return 1;
+    }
+
+    return 1;
+}
+
+int program_cmd_cd(void)
+{
+    static char temp[PATH_MAX];
+    memset(temp, 0, sizeof(temp));
+    if (strcmp(program.input, "cd") != 0)
+    {
+        return 0;
+    }
+
+    memcpy(temp, program.dirpath, PATH_MAX - 1);
+    program_prompt("directory #");
+    char *end;
+    size_t index = strtoul(program.input, &end, 10);
+    struct dirent *entry = get_directory(index);
+    if (entry == NULL)
+    {
+        printf("invalid number\n");
+        memcpy(program.dirpath, temp, PATH_MAX - 1);
+        return 1;
+    }
+
+    if (open_directory(entry->d_name))
+    {
+        printf("can't open directory '%s'\n", entry->d_name);
+        memcpy(program.dirpath, temp, PATH_MAX - 1);
+        return 1;
+    }
+
+    return 1;
+}
+
+int program_cmd_open(void)
+{
+    static char temp[PATH_MAX];
+    memset(temp, 0, sizeof(temp));
+    char *end;
+    size_t index = strtoul(program.input, &end, 10);
+    struct dirent *entry = get_directory(index);
+
+    if (entry == NULL)
+    {
+        printf("invalid number\n");
+        return 0;
+    }
+
+    strncpy(temp, program.dirpath, PATH_MAX);
+    strncat(program.dirpath, "/", PATH_MAX - 1);
+    strncat(program.dirpath, entry->d_name, PATH_MAX - 1);
+
+    SDL_Surface *surface = IMG_Load(program.dirpath);
+    if (surface == NULL)
+    {
+        printf("image loading error\n");
+        memcpy(program.dirpath, temp, PATH_MAX - 1);
+        return 1;
+    }
+
+    SDL_Window *window = SDL_CreateWindow("viewer", 40, 40, surface->w, surface->h, 0);
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Event event;
+    int loop = 1;
+
+    while (loop)
+    {
+        while (SDL_PollEvent(&event))
+        {
+            if (event.type == SDL_KEYUP)
+            {
+                loop = 0;
+            }
         }
+        SDL_RenderClear(renderer);
+        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        SDL_RenderPresent(renderer);
+        SDL_Delay(500);
     }
 
-    return buffer;
+    SDL_DestroyTexture(texture);
+    SDL_FreeSurface(surface);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+
+    memcpy(program.dirpath, temp, PATH_MAX - 1);
+    return 1;
 }
 
-int get_str_length(char* str, int max) {
-    int i = 0; 
-    while(str[i] != '\0' && i < max)
-        i++;
-    return i;
-}
-
-char* get_file_directory(char* path, int max) {
-    int length = get_str_length(path, max);
-    for(char* it = path + length - 1; it != path - 1; it--) {
-        if(*it == '/') {
-            *it = '\0';
-            return it;
-        }
+int program_cmd_quit(void)
+{
+    if (strcmp(program.input, "quit") != 0)
+    {
+        return 0;
     }
 
-    return NULL;
+    free(entries.list);
+    memset(&entries, 0, sizeof(entries));
+    memset(&program, 0, sizeof(program));
+    return 1;
 }
 
-void append_path(struct dirent* de) {
-    strncat(current_path, "/", sizeof(current_path) - 1);
-    strncat(current_path, de->d_name, sizeof(current_path) - 1);
-}
-
-int main(int argc, char** argv) {
+int main(int argc, char **argv)
+{
     SDL_Init(SDL_INIT_EVERYTHING);
     IMG_Init(IMG_INIT_JPG | IMG_INIT_PNG | IMG_INIT_WEBP);
-    
-    strncpy(current_path, argv[0], PATH_MAX);
-    path_end = get_file_directory(current_path, PATH_MAX);
-    read_directory(current_path);
 
-    while(1) {
-        printf("DIRECTORY %s\n", current_path);
-        print_directory();
-        printf("option: "); 
-        int size;
-        char* input = readline(&size);
-
-        if(strncmp("quit", input, size) == 0) {
-            break;
-        } 
-        else if(strncmp("here", input, size) == 0) {
-            printf("%s\n", current_path);
-            continue;
-        }
-        else if(strncmp("set", input, size) == 0) {
-            printf("path option: ");
-            input = readline(&size);
-            DIR* dir = opendir(input);
-            if(dir == NULL) {
-                printf("invalid path\n");
-                continue;
-            }
-            closedir(dir);
-            realpath(input, current_path);
-            read_directory(current_path);
-            continue;
-        } 
-        else if(strncmp("cd", input, size) == 0) {
-            printf("cd option: ");
-            input = readline(&size);
-            char* endptr; 
-            unsigned long index = strtoul(input, &endptr, 10);
-            if(index != 0) {
-                struct dirent* de = get_dirent(index - 1);
-                if(de->d_type == 4) {
-                    if(strcmp(current_path, "/") == 0) 
-                        strcpy(current_path, "");
-                    append_path(de);
-                    read_directory(current_path);
-                }
-            }
-        } 
-        else if (size > 0) {
-            char* endptr; 
-            unsigned long index = strtoul(input, &endptr, 10);
-            if(index != 0) {
-                struct dirent* de = get_dirent(index - 1);
-                if(de->d_type == 8) {
-                    append_path(de);
-                    SDL_Surface* surface = IMG_Load(current_path);
-                    if(surface == NULL) {
-                        printf("error.\n");
-                        path_end = get_file_directory(current_path, sizeof(current_path) - 1);
-                        continue;
-                    }
-                    
-                    SDL_Window* window = SDL_CreateWindow("viewer", 40, 40, surface->w, surface->h, 0);
-                    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-                    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-                    SDL_Event event; 
-                    int loop = 1;
-
-                    while(loop) {
-                        while(SDL_PollEvent(&event)) {
-                            if(event.type == SDL_KEYUP) {
-                                loop = 0; 
-                            }
-                        }
-                        SDL_RenderClear(renderer);
-                        SDL_RenderCopy(renderer, texture, NULL, NULL);
-                        SDL_RenderPresent(renderer);
-                        SDL_Delay(500);
-                    }
-
-                    SDL_DestroyTexture(texture);
-                    SDL_FreeSurface(surface);
-                    SDL_DestroyRenderer(renderer);
-                    SDL_DestroyWindow(window);
-
-                    path_end = get_file_directory(current_path, sizeof(current_path) - 1);
-                }
-            }
-        }
+    if(open_directory("/")) {
+        printf("error loading initial folder\n");
     }
 
-    free(dirent_array);
+    while (1)
+    {
+        show_directory_path();
+        show_directory();
+        program_prompt("command");
+
+        if (program_cmd_quit())
+        {
+            break;
+        }
+
+        if (program_cmd_set())
+        {
+            continue;
+        }
+
+        if (program_cmd_cd())
+        {
+            continue;
+        }
+
+        if (program_cmd_open())
+        {
+            continue;
+        }
+    }
     return 0;
 }
