@@ -139,6 +139,7 @@ int main(int argc, char** argv) {
         else if(strncmp("set", input, size) == 0) {
             printf("path: ");
             input = readline(&size);
+            memset(current_path, 0, sizeof(current_path));
             memcpy(current_path, input, size);
             read_directory(current_path);
         } 
