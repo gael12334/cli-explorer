@@ -1,8 +1,9 @@
 Copyright (c) 2026 Gaël Fortier
 
 ## Disclaimer
-This projet is unstable and likely to crash. 
-This projet is meant as an artefact for my portfolio.
+This project is unstable and likely to crash. 
+This project is full of bugs and unexpected behaviors.
+This project is meant as an artefact for my portfolio.
 Avoid using this program.
 
 ## CLI file explorer
