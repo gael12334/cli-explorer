@@ -151,8 +151,7 @@ int main(int argc, char** argv) {
                 continue;
             }
             closedir(dir);
-            input = dirname(input);
-            strcpy(current_path, input);
+            realpath(input, current_path);
             read_directory(current_path);
             continue;
         } 
