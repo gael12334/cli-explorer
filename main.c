@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <linux/limits.h>
+#include <ctype.h>
+#include <libgen.h>
 
 char current_path[PATH_MAX] = {0};
 char* path_end = &current_path[0];
@@ -136,12 +138,23 @@ int main(int argc, char** argv) {
         if(strncmp("quit", input, size) == 0) {
             break;
         } 
+        else if(strncmp("here", input, size) == 0) {
+            printf("%s\n", current_path);
+            continue;
+        }
         else if(strncmp("set", input, size) == 0) {
-            printf("path: ");
+            printf("path option: ");
             input = readline(&size);
-            memset(current_path, 0, sizeof(current_path));
-            memcpy(current_path, input, size);
+            DIR* dir = opendir(input);
+            if(dir == NULL) {
+                printf("invalid path\n");
+                continue;
+            }
+            closedir(dir);
+            input = dirname(input);
+            strcpy(current_path, input);
             read_directory(current_path);
+            continue;
         } 
         else if(strncmp("cd", input, size) == 0) {
             printf("cd option: ");
@@ -150,15 +163,11 @@ int main(int argc, char** argv) {
             unsigned long index = strtoul(input, &endptr, 10);
             if(index != 0) {
                 struct dirent* de = get_dirent(index - 1);
-                if(strncmp("..", de->d_name, sizeof(de->d_name)) == 0) {
-                    path_end = get_file_directory(current_path, PATH_MAX);
+                if(de->d_type == 4) {
+                    if(strcmp(current_path, "/") == 0) 
+                        strcpy(current_path, "");
+                    append_path(de);
                     read_directory(current_path);
-                }
-                else if(strncmp(".", de->d_name, sizeof(de->d_name)) != 0)  {   
-                    if(de->d_type == 4) { // 4 = DIR
-                        path_end = get_file_directory(current_path, PATH_MAX);
-                        read_directory(current_path);
-                    }
                 }
             }
         } 
