@@ -42,6 +42,13 @@ struct dirent* get_dirent(size_t index) {
 void read_directory(const char* path) {
     clear_dirent();
     DIR* dir = opendir(path);
+    if(dir == NULL) {
+        dir = opendir("/");
+        current_path[0] = '/';
+        current_path[1] = '.';
+        current_path[2] = '\0';
+    }
+    
     struct dirent* de = NULL;
     while((de = readdir(dir)))
         add_dirent(de);
@@ -69,7 +76,7 @@ void print_directory(void) {
     struct dirent* de; 
     for(size_t i = 0; i < dirent_size; i++) {
         de = get_dirent(i);
-        printf("%zu : %s/%-20s", i + 1, current_path, de->d_name);
+        printf("%zu : %s/%-50s", i + 1, current_path, de->d_name);
         printf("%s\n", type[de->d_type]);
     }
 }
@@ -150,7 +157,7 @@ int main(int argc, char** argv) {
                 }
                 else if(strncmp(".", de->d_name, sizeof(de->d_name)) != 0)  {   
                     if(de->d_type == 4) { // 4 = DIR
-                        append_path(de);
+                        path_end = get_file_directory(current_path, PATH_MAX);
                         read_directory(current_path);
                     }
                 }
