@@ -74,7 +74,7 @@ void print_directory(void) {
     struct dirent* de; 
     for(size_t i = 0; i < dirent_size; i++) {
         de = get_dirent(i);
-        printf("%zu : %s/%-50s", i + 1, current_path, de->d_name);
+        printf("%zu : %-50s", i + 1, de->d_name);
         printf("%s\n", type[de->d_type]);
     }
 }
