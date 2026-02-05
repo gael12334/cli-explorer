@@ -43,10 +43,8 @@ void read_directory(const char* path) {
     clear_dirent();
     DIR* dir = opendir(path);
     if(dir == NULL) {
-        dir = opendir("/");
-        current_path[0] = '/';
-        current_path[1] = '.';
-        current_path[2] = '\0';
+        printf("failed to open dir.\n%s", path);
+        exit(-1);
     }
     
     struct dirent* de = NULL;
